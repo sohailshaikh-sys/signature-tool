@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Signature Tool</title>
     
-    <link class="rounded-full" rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #0f172a; }
         .card-bg { background-color: #1e293b; }
@@ -95,7 +95,7 @@
             </div>
         </div>
 
-        <button id="downloadBtn" type="button" disabled class="mt-5 w-full bg-white text-slate-900 hover:bg-slate-100 disabled:bg-slate-700 disabled:text-slate-400 font-semibold py-3.5 px-4 rounded-xl transition-all duration-100 shadow-lg cursor-not-allowed flex items-center justify-center gap-2">
+        <button id="downloadBtn" type="button" disabled class="mt-5 w-full bg-slate-700 text-slate-400 font-semibold py-3.5 px-4 rounded-xl transition-all duration-100 shadow-lg cursor-not-allowed flex items-center justify-center gap-2">
             Download Image (JPG)
         </button>
 
@@ -126,11 +126,11 @@
 
         let rawImageInstance = null;
         let finalOutputBlob = null;
+        let currentBlobUrl = null;
         let manualRotationDegrees = 0; 
         let initialSizeKBs = 0;
         const targetOutputFormat = 'image/jpeg';
 
-        // PRODUCTION-READY CODES: LOCALSTORAGE PRIVACY FALLBACK ENGINE
         let memoryStore = {
             'sig_image_counter': '1',
             'sig_counter_last_reset': '0'
@@ -146,7 +146,6 @@
             try { localStorage.setItem(key, val); } catch(e) {}
         }
 
-        // 24-HOUR TIME-BOUND RESET ENGINE FOR INDIAN STANDARD TIME (IST)
         function checkAndResetDownloadCounter() {
             const currentTimeStamp = Date.now();
             const lastSavedResetTime = safeGetItem('sig_counter_last_reset');
@@ -165,8 +164,10 @@
             windowDragOverlay.classList.remove('opacity-0');
         });
         window.addEventListener('dragover', (e) => { e.preventDefault(); });
-        windowDragOverlay.addEventListener('dragleave', () => {
-            windowDragOverlay.classList.add('opacity-0');
+        windowDragOverlay.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null) {
+                windowDragOverlay.classList.add('opacity-0');
+            }
         });
         window.addEventListener('drop', (e) => {
             e.preventDefault();
@@ -174,8 +175,17 @@
             if (e.dataTransfer.files.length > 0) processFileEntry(e.dataTransfer.files[0]);
         });
 
-        dropZone.addEventListener('click', () => { if(!rawImageInstance) fileInput.click(); });
-        fileInput.addEventListener('change', (e) => processFileEntry(e.target.files[0]));
+        dropZone.addEventListener('click', (e) => { 
+            if (!rawImageInstance && !e.target.closest('#canvasToolbar')) {
+                fileInput.click();
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                processFileEntry(e.target.files[0]);
+            }
+        });
 
         window.addEventListener('paste', (e) => {
             const clipboardItems = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -199,6 +209,10 @@
         });
 
         function resetToolState() {
+            if (currentBlobUrl) {
+                URL.revokeObjectURL(currentBlobUrl);
+                currentBlobUrl = null;
+            }
             rawImageInstance = null;
             finalOutputBlob = null;
             manualRotationDegrees = 0;
@@ -220,8 +234,7 @@
             if (!file || !file.type.match('image.*')) return;
             initialSizeKBs = (file.size / 1024).toFixed(1);
             
-            // UI Visual Feedback Indicator
-            downloadBtn.textContent = "Processing layout arrays...";
+            downloadBtn.textContent = "Processing image...";
             downloadBtn.disabled = true;
             
             const reader = new FileReader();
@@ -241,7 +254,6 @@
             rawImageInstance.src = src;
         }
 
-        // HYBRID CRADLE SEGMENTATION READABILITY TUNER
         function calculateHumanReadingScore(ctx, w, h) {
             const imgData = ctx.getImageData(0, 0, w, h);
             const data = imgData.data;
@@ -328,8 +340,6 @@
             if (!rawImageInstance) return;
 
             const ctx = processingCanvas.getContext('2d', { willReadFrequently: true });
-            ctx.imageOrientation = 'from-image';
-
             const nativeW = rawImageInstance.naturalWidth;
             const nativeH = rawImageInstance.naturalHeight;
 
@@ -337,8 +347,8 @@
             
             if (enableAutoOrientation) {
                 let scores = {};
-
                 const evaluationAngles = [0, 90, 180, 270];
+
                 for (let angle of evaluationAngles) {
                     if (angle === 90 || angle === 270) {
                         processingCanvas.width = nativeH; processingCanvas.height = nativeW;
@@ -347,8 +357,6 @@
                     }
                     
                     ctx.clearRect(0, 0, processingCanvas.width, processingCanvas.height);
-                    
-                    // CRITICAL FIX: Base layers for absolute PNG transparency compatibility mapping
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, processingCanvas.width, processingCanvas.height);
                     
@@ -358,14 +366,10 @@
                     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
                     let trackingScore = calculateHumanReadingScore(ctx, processingCanvas.width, processingCanvas.height);
-                    
-                    if (angle === 90 || angle === 270) {
-                        trackingScore *= 1.4; 
-                    }
+                    if (angle === 90 || angle === 270) trackingScore *= 1.4; 
                     scores[angle] = trackingScore;
                 }
 
-                // ANTI-OVERROTATION PROTECTOR SYSTEM
                 let optimumAngle = 0;
                 let baselineScore = scores[0];
                 let highestAlternativeScore = baselineScore;
@@ -377,10 +381,8 @@
                     }
                 }
 
-                if (optimumAngle !== 0) {
-                    if (highestAlternativeScore < (baselineScore * 1.5)) {
-                        optimumAngle = 0;
-                    }
+                if (optimumAngle !== 0 && highestAlternativeScore < (baselineScore * 1.5)) {
+                    optimumAngle = 0;
                 }
 
                 targetRotation = optimumAngle;
@@ -394,8 +396,6 @@
             }
 
             ctx.clearRect(0, 0, processingCanvas.width, processingCanvas.height);
-            
-            // CRITICAL FIX: Secondary base layer initialization for transparency protection
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, processingCanvas.width, processingCanvas.height);
             
@@ -498,8 +498,10 @@
                 outputBlob = await new Promise(res => activeCanvas.toBlob(res, targetOutputFormat, Math.max(0.1, quality)));
             }
 
+            if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
             finalOutputBlob = outputBlob;
-            previewImage.src = URL.createObjectURL(finalOutputBlob);
+            currentBlobUrl = URL.createObjectURL(finalOutputBlob);
+            previewImage.src = currentBlobUrl;
             
             origSizeEl.textContent = typeof initialSizeKBs === 'number' ? `${initialSizeKBs} KB` : initialSizeKBs;
             optSizeEl.textContent = `${(finalOutputBlob.size / 1024).toFixed(1)} KB`;
@@ -518,7 +520,7 @@
             
             let count = parseInt(safeGetItem('sig_image_counter')) || 1;
             const downloadLink = document.createElement('a');
-            downloadLink.href = URL.createObjectURL(finalOutputBlob);
+            downloadLink.href = currentBlobUrl;
             downloadLink.download = `image ${count}.jpg`;
             downloadLink.click();
             
